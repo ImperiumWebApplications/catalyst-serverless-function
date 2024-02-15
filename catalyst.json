@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "targets": [
+      "authorize_function"
+    ],
+    "ignore": [],
+    "source": "functions"
+  }
+}

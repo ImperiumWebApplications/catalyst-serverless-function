@@ -1,0 +1,36 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "2636000000977009",
+      "name": "Authorize",
+      "domain": {
+        "id": "50017734758",
+        "name": "authorize-60017753211.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60017753211",
+          "name": "Development",
+          "type": 3
+        },
+        {
+          "idx": 2,
+          "id": "50017766276",
+          "name": "Production",
+          "type": 1
+        }
+      ]
+    }
+  ]
+}
