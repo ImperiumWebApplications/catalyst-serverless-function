@@ -3,75 +3,12 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
-function generateRandomBigInt() {
-  const min = 1000000000n;
-  const max = 9999999999n;
-  const randomBigInt =
-    min + BigInt(Math.floor(Number(max - min + 1n) * Math.random())) + min;
-  return randomBigInt;
-}
-
-async function createEntryInZohoCreator(
-  accessToken,
-  catalyst_row_id,
-  refreshToken
-) {
-  const creatorApiUrl = `https://creator.zoho.in/api/v2/senthuraa/microservices/form/Zoho_Books_Authorization`;
-
-  const postData = {
-    data: {
-      zoho_data_center: "148608000000529220",
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      catalyst_row_id: catalyst_row_id,
-    },
-  };
+async function updateCreatorRecord(accessToken, creatorRecId, refreshToken) {
+  const baseURL = `https://creator.zoho.in/api/v2.1/senthuraa/microservices/report/zoho_books_authorization_report`;
 
   try {
-    await axios.post(creatorApiUrl, postData, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.info("Zoho Creator entry created successfully");
-  } catch (error) {
-    console.error("Error creating entry in Zoho Creator:", error.response.data);
-    throw error; // Propagate the error to handle it accordingly
-  }
-}
-
-async function updateCreatorRecord(accessToken, catalystRowId, refreshToken) {
-  const baseURL = `https://creator.zoho.in/api/v2.1/senthuraa/microservices/report/Zoho_Books_Authorization_Report`;
-
-  try {
-    // Fetch all records
-    const recordsResponse = await axios.get(baseURL, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-        accept: "application/json",
-      },
-    });
-    console.log("Incoming parameters for updateCreatorRecord", {
-      accessToken,
-      catalystRowId,
-      refreshToken,
-    });
-    console.log("recordsResponse.data.data", recordsResponse.data.data);
-    // Find the matching record by catalyst_row_id
-    const record = recordsResponse.data.data.find(
-      (record) => record.catalyst_row_id === catalystRowId
-    );
-
-    console.log("record found is", record);
-
-    if (!record) {
-      throw new Error("Matching record not found.");
-    }
-
-    // Update the found record
-    const updateRecordUrl = `${baseURL}/${record.ID}`; // Adjust URL as needed
+    // Update the record in Zoho Creator directly using creator_rec_id
+    const updateRecordUrl = `${baseURL}/${creatorRecId}`; // Adjust URL as needed
     await axios.patch(
       updateRecordUrl,
       {
@@ -117,9 +54,6 @@ module.exports = async (context, basicIO) => {
     const clientSecret = process.env.CLIENT_SECRET;
     const redirectUri = process.env.REDIRECT_URI;
     const grantType = "authorization_code";
-    const project_id = stateJSON.project_id;
-    const tableIdentifier = stateJSON.table_id;
-    const apiBase = `https://api.catalyst.zoho.in/baas/v1/project/${project_id}/table/${tableIdentifier}`;
 
     const oauthUrl = `https://accounts.zoho.in/oauth/v2/token?code=${encodeURIComponent(
       code
@@ -140,6 +74,18 @@ module.exports = async (context, basicIO) => {
     access_token = oauthResponse.data.access_token;
     refresh_token = oauthResponse.data.refresh_token;
 
+    // First, update the entry inside Zoho Creator
+    await updateCreatorRecord(
+      access_token,
+      stateJSON.creator_rec_id,
+      refresh_token
+    );
+
+    // Logic for updating or inserting a new row in the Catalyst Data Store
+    const project_id = stateJSON.project_id;
+    const tableIdentifier = stateJSON.table_id;
+    const apiBase = `https://api.catalyst.zoho.in/baas/v1/project/${project_id}/table/${tableIdentifier}`;
+
     const getRecordUrl = `${apiBase}/row`;
     const getRecordResponse = await axios.get(getRecordUrl, {
       headers: {
@@ -153,14 +99,13 @@ module.exports = async (context, basicIO) => {
     );
 
     if (existingRow) {
-      console.info("Updating row");
+      console.info("Updating row in Catalyst Data Store");
       // Update existing row
       const updateRowData = JSON.stringify([
         {
-          access_token, // Assuming stateJSON contains the fields to update
+          access_token,
           refresh_token,
-          zoho_org_id: generateRandomBigInt().toString(),
-          ROWID: stateJSON.catalyst_row_id, // Include the ROWID to identify the row to update
+          ROWID: stateJSON.catalyst_row_id,
         },
       ]);
 
@@ -171,42 +116,24 @@ module.exports = async (context, basicIO) => {
           Environment: "Development",
         },
       });
-      await updateCreatorRecord(
-        access_token,
-        stateJSON.catalyst_row_id,
-        refresh_token
-      );
     } else {
-      console.info("Inserting new row");
+      console.info("Inserting new row in Catalyst Data Store");
       // Insert new row logic...
       const newRowData = JSON.stringify([
         {
           access_token,
           refresh_token,
-          zoho_org_id: generateRandomBigInt().toString(),
-          organization_name: "KS",
-          // Include additional fields as required
+          organization_name: "KS", // Include additional fields as required
         },
       ]);
 
-      const newRowDataResponse = await axios.post(
-        `${apiBase}/row`,
-        newRowData,
-        {
-          headers: {
-            Authorization: `Zoho-oauthtoken ${access_token}`,
-            "Content-Type": "application/json",
-            Environment: "Development",
-          },
-        }
-      );
-
-      // Create an entry in Zoho Creator after inserting a new row
-      await createEntryInZohoCreator(
-        access_token,
-        newRowDataResponse.data.data[0].ROWID,
-        refresh_token
-      );
+      await axios.post(`${apiBase}/row`, newRowData, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${access_token}`,
+          "Content-Type": "application/json",
+          Environment: "Development",
+        },
+      });
     }
 
     basicIO.write(
